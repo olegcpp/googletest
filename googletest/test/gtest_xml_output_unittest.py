@@ -47,20 +47,25 @@ GTEST_OUTPUT_FLAG = '--gtest_output'
 GTEST_DEFAULT_OUTPUT_FILE = 'test_detail.xml'
 GTEST_PROGRAM_NAME = 'gtest_xml_output_unittest_'
 
+# The flag indicating stacktraces are not supported
+NO_STACKTRACE_SUPPORT_FLAG = '--no_stacktrace_support'
+
 # The environment variables for test sharding.
 TOTAL_SHARDS_ENV_VAR = 'GTEST_TOTAL_SHARDS'
 SHARD_INDEX_ENV_VAR = 'GTEST_SHARD_INDEX'
 SHARD_STATUS_FILE_ENV_VAR = 'GTEST_SHARD_STATUS_FILE'
 
-SUPPORTS_STACK_TRACES = False
+SUPPORTS_STACK_TRACES = NO_STACKTRACE_SUPPORT_FLAG not in sys.argv
 
 if SUPPORTS_STACK_TRACES:
   STACK_TRACE_TEMPLATE = '\nStack trace:\n*'
 else:
   STACK_TRACE_TEMPLATE = ''
+  # unittest.main() can't handle unknown flags
+  sys.argv.remove(NO_STACKTRACE_SUPPORT_FLAG)
 
 EXPECTED_NON_EMPTY_XML = """<?xml version="1.0" encoding="UTF-8"?>
-<testsuites tests="23" failures="4" disabled="2" errors="0" time="*" timestamp="*" name="AllTests" ad_hoc_property="42">
+<testsuites tests="24" failures="4" disabled="2" errors="0" time="*" timestamp="*" name="AllTests" ad_hoc_property="42">
   <testsuite name="SuccessfulTest" tests="1" failures="0" disabled="0" errors="0" time="*">
     <testcase name="Succeeds" status="run" time="*" classname="SuccessfulTest"/>
   </testsuite>
@@ -103,7 +108,10 @@ Invalid characters in brackets []%(stack)s]]></failure>
   <testsuite name="DisabledTest" tests="1" failures="0" disabled="1" errors="0" time="*">
     <testcase name="DISABLED_test_not_run" status="notrun" time="*" classname="DisabledTest"/>
   </testsuite>
-  <testsuite name="PropertyRecordingTest" tests="4" failures="0" disabled="0" errors="0" time="*" SetUpTestCase="yes" TearDownTestCase="aye">
+  <testsuite name="SkippedTest" tests="1" failures="0" disabled="0" errors="0" time="*">
+    <testcase name="Skipped" status="skipped" time="*" classname="SkippedTest"/>
+  </testsuite>
+  <testsuite name="PropertyRecordingTest" tests="4" failures="0" disabled="0" errors="0" time="*" SetUpTestSuite="yes" TearDownTestSuite="aye">
     <testcase name="OneProperty" status="run" time="*" classname="PropertyRecordingTest">
       <properties>
         <property name="key_1" value="1"/>
@@ -156,11 +164,11 @@ Invalid characters in brackets []%(stack)s]]></failure>
   <testsuite name="TypedTest/1" tests="1" failures="0" disabled="0" errors="0" time="*">
     <testcase name="HasTypeParamAttribute" type_param="*" status="run" time="*" classname="TypedTest/1" />
   </testsuite>
-  <testsuite name="Single/TypeParameterizedTestCase/0" tests="1" failures="0" disabled="0" errors="0" time="*">
-    <testcase name="HasTypeParamAttribute" type_param="*" status="run" time="*" classname="Single/TypeParameterizedTestCase/0" />
+  <testsuite name="Single/TypeParameterizedTestSuite/0" tests="1" failures="0" disabled="0" errors="0" time="*">
+    <testcase name="HasTypeParamAttribute" type_param="*" status="run" time="*" classname="Single/TypeParameterizedTestSuite/0" />
   </testsuite>
-  <testsuite name="Single/TypeParameterizedTestCase/1" tests="1" failures="0" disabled="0" errors="0" time="*">
-    <testcase name="HasTypeParamAttribute" type_param="*" status="run" time="*" classname="Single/TypeParameterizedTestCase/1" />
+  <testsuite name="Single/TypeParameterizedTestSuite/1" tests="1" failures="0" disabled="0" errors="0" time="*">
+    <testcase name="HasTypeParamAttribute" type_param="*" status="run" time="*" classname="Single/TypeParameterizedTestSuite/1" />
   </testsuite>
 </testsuites>""" % {'stack': STACK_TRACE_TEMPLATE}
 
@@ -178,15 +186,15 @@ EXPECTED_SHARDED_TEST_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <testsuite name="SuccessfulTest" tests="1" failures="0" disabled="0" errors="0" time="*">
     <testcase name="Succeeds" status="run" time="*" classname="SuccessfulTest"/>
   </testsuite>
-  <testsuite name="NoFixtureTest" tests="1" failures="0" disabled="0" errors="0" time="*">
-     <testcase name="RecordProperty" status="run" time="*" classname="NoFixtureTest">
-       <properties>
-         <property name="key" value="1"/>
-       </properties>
-     </testcase>
+  <testsuite name="PropertyRecordingTest" tests="1" failures="0" disabled="0" errors="0" time="*" SetUpTestSuite="yes" TearDownTestSuite="aye">
+    <testcase name="TwoValuesForOneKeyUsesLastValue" status="run" time="*" classname="PropertyRecordingTest">
+      <properties>
+        <property name="key_1" value="2"/>
+      </properties>
+    </testcase>
   </testsuite>
   <testsuite name="Single/ValueParamTest" tests="1" failures="0" disabled="0" errors="0" time="*">
-    <testcase name="AnotherTestThatHasValueParamAttribute/1" value_param="42" status="run" time="*" classname="Single/ValueParamTest" />
+    <testcase name="AnotherTestThatHasValueParamAttribute/0" value_param="33" status="run" time="*" classname="Single/ValueParamTest" />
   </testsuite>
 </testsuites>"""
 
@@ -261,7 +269,8 @@ class GTestXMLOutputUnitTest(gtest_xml_test_utils.GTestXMLTestCase):
         'gtest_no_test_unittest')
     try:
       os.remove(output_file)
-    except OSError, e:
+    except OSError:
+      e = sys.exc_info()[1]
       if e.errno != errno.ENOENT:
         raise
 
